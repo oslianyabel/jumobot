@@ -1,0 +1,40 @@
+User: Hola
+Assistant: ¡Hola de nuevo, Osliani! � ¿Cómo estás? ¿En qué puedo ayudarte hoy?
+
+User: quiero una pagina web
+Assistant: ¡Claro, Osliani! � Tener una página web es una excelente manera de fortalecer la presencia de tu empresa en línea. �
+
+En JUMO Technologies, ofrecemos el módulo de **Sitio Web** de Odoo que te permite crear una página web atractiva y funcional. Aquí tienes alguno
+s puntos clave de lo que podemos hacer:
+
+1. **Diseño Personalizado**: Puedes elegir entre plantillas personalizables donde puedes reflejar la identidad de tu marca. Imagina una página q
+ue hable de ti y atraiga a tus clientes. �
+
+2. **Funciones de Comercio Electrónico**: Si planeas vender productos, podemos integrar un sistema de comercio electrónico para administrar tus
+ventas en línea. �
+
+3. **SEO Optimizado**: Trabajamos en la optimización para motores de búsqueda (SEO) para que tu página web sea fácil de encontrar. �
+
+4. **Integración con Redes Sociales**: Puedes conectar tu página web con tus perfiles de redes sociales, lo que te ayudará a aumentar tu alcance
+. �
+
+Además, como parte del servicio, ofrecemos formación y soporte para que puedas manejar tu página con facilidad.
+
+¿Te gustaría discutir más sobre las características que deseas en tu sitio web? Y, si tienes alguna idea en mente que quieras compartir, ¡estaré
+ encantada de escucharte! �
+
+User: User: ok
+Assistant: Perfecto, Osliani! � Estoy aquí para ayudarte.
+
+Para avanzar, me gustaría saber un poco más sobre tus necesidades específicas. Aquí hay algunas preguntas que podrían ayudarte a definir lo que
+buscas:
+
+1. **¿Qué tipo de página web deseas crear?** (por ejemplo, una página corporativa, una tienda en línea, un blog, etc.)
+2. **¿Tienes contenido listo?** (textos, imágenes, logotipo, etc.)
+3. **¿Hay alguna funcionalidad específica que quieras integrar?** (como formularios de contacto, chat en vivo, integración con redes sociales, e
+tc.)
+4. **¿Cuál es tu público objetivo?** (esto nos ayuda a diseñar algo que realmente les atraiga).
+
+Y por último, si quisieras, puedo enviarte un presupuesto detallado, así que necesitaría tu correo electrónico y tu nombre completo. ¡Cuéntame!
+
+User: quiero una web de apuestas deportivas. no tengo el contenido listo. mi correo es test@gmail.com
