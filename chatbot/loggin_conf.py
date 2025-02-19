@@ -1,6 +1,8 @@
 from logging.config import dictConfig
 
-from chatbot.core.config import config
+from chatbot.core.config import get_config
+
+config = get_config()
 
 
 def configure_loggin() -> None:
@@ -11,7 +13,7 @@ def configure_loggin() -> None:
             "filters": {
                 "correlation_id": {
                     "()": "asgi_correlation_id.CorrelationIdFilter",
-                    "uuid_length": 8 if config.ENV_STATE == "dev" else 32,
+                    "uuid_length": 8 if config.ENVIRONMENT == "dev" else 32,
                     "default_value": "-",
                 }
             },
@@ -30,7 +32,7 @@ def configure_loggin() -> None:
                     "class": "pythonjsonlogger.jsonlogger.JsonFormatter",
                     "dateftm": "%Y-%m-%dT%H:%M:%S",
                     "format": "%(asctime)s %(msecs)03d %(levelname)-8s %(correlation_id)s %(name)s %(lineno)d %(message)s",
-                }
+                },
             },
             "handlers": {
                 "default": {
@@ -43,7 +45,7 @@ def configure_loggin() -> None:
                     "class": "logging.handlers.RotatingFileHandler",
                     "level": "DEBUG",
                     "formatter": "file_json",
-                    "filename": "storeapi.log",
+                    "filename": "chatbot.log",
                     "maxBytes": 1024 * 1024,  # 1MB
                     "backupCount": 5,
                     "encoding": "utf8",
@@ -60,9 +62,9 @@ def configure_loggin() -> None:
                     "handlers": ["default", "rotating_file"],
                     "level": "WARNING",
                 },
-                "storeapi": {
+                "chatbot": {
                     "handlers": ["default", "rotating_file"],
-                    "level": "DEBUG" if config.ENV_STATE == "dev" else "INFO",
+                    "level": "DEBUG" if config.ENVIRONMENT == "dev" else "INFO",
                     "propagate": False,
                 },
             },

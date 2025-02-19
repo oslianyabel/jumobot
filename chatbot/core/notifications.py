@@ -11,13 +11,13 @@ init(autoreset=True)
 
 
 def send_email(EMAIL_TO, subject, message):
-    env_config = get_config()
-    if env_config.ENVIRONMENT != "prod":
+    config = get_config()
+    if config.ENVIRONMENT != "prod":
         return True
     
-    EMAIL = env_config.EMAIL
-    PASSWORD = env_config.EMAIL_PASSWORD
-    HOST = env_config.EMAIL_HOST
+    EMAIL = config.EMAIL
+    PASSWORD = config.EMAIL_PASSWORD
+    HOST = config.EMAIL_HOST
 
     email = EmailMessage()
     email["from"] = EMAIL
@@ -41,8 +41,8 @@ def send_email(EMAIL_TO, subject, message):
 
 def send_twilio_message(body, from_, to):
     try:
-        env_config = get_config()
-        twilio_client = Client(env_config.ACCOUNT_SID, env_config.AUTH_TOKEN)
+        config = get_config()
+        twilio_client = Client(config.ACCOUNT_SID, config.AUTH_TOKEN)
         twilio_client.messages.create(
             body=body, from_=f"whatsapp:+{from_}", to=f"whatsapp:+{to}"
         )
@@ -59,8 +59,8 @@ def send_twilio_message(body, from_, to):
 def send_twilio_message2(body, from_, to):
     retries = 3
     delay = 0.5  # 500ms delay
-    env_config = get_config()
-    client = Client(env_config.ACCOUNT_SID, env_config.AUTH_TOKEN)
+    config = get_config()
+    client = Client(config.ACCOUNT_SID, config.AUTH_TOKEN)
 
     for attempt in range(1, retries + 1):
         try:

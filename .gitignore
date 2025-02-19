@@ -7,3 +7,5 @@ env_prod/
 script.py
 .pytest_cache/
 .vscode/
+command.txt
+notas.txt

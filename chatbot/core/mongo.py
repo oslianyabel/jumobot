@@ -7,17 +7,17 @@ from chatbot.core.config import get_config
 
 init(autoreset=True)
 
+config = get_config()
 # MONGO_URI = "mongodb+srv://oslianyabel:atlas801*@cluster0.2wbttfz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-# MONGO_URI = "mongodb://localhost:27017"
-env_config = get_config()
-MONGO_URI = env_config.DATABASE_URL
+# MONGO_URI = config.DATABASE_URL
+MONGO_URI = "mongodb://localhost:27017"
 
 # Conexión asíncrona a MongoDB
 client = AsyncIOMotorClient(MONGO_URI)
 db = client["wa_jumo"]
 threads_collection = db["threads"]
 
-openai_client = AsyncOpenAI(api_key=env_config.OPENAI_API_KEY)
+openai_client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
 
 async def create_thread(user_id):

@@ -14,13 +14,13 @@ from chatbot.core import notifications
 
 init(autoreset=True)
 
-env_config = get_config()
-OPENAI_API_KEY = env_config.OPENAI_API_KEY
+config = get_config()
+OPENAI_API_KEY = config.OPENAI_API_KEY
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-PUBLIC_ODOO_URL = env_config.PUBLIC_ODOO_URL
-PUBLIC_CREATE_PATH = env_config.PUBLIC_CREATE_PATH
-PUBLIC_SEARCH_PATH = env_config.PUBLIC_SEARCH_PATH
+PUBLIC_ODOO_URL = config.PUBLIC_ODOO_URL
+PUBLIC_CREATE_PATH = config.PUBLIC_CREATE_PATH
+PUBLIC_SEARCH_PATH = config.PUBLIC_SEARCH_PATH
 SEARCH_URL = f"{PUBLIC_ODOO_URL}{PUBLIC_SEARCH_PATH}"
 CREATE_URL = f"{PUBLIC_ODOO_URL}{PUBLIC_CREATE_PATH}"
 

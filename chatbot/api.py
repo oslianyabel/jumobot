@@ -1,5 +1,7 @@
 import logging
 import re
+import asyncio
+from contextlib import asynccontextmanager
 
 import uvicorn
 from asgi_correlation_id import CorrelationIdMiddleware
@@ -8,13 +10,20 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from twilio.twiml.messaging_response import MessagingResponse
 
-from chatbot.core import mongo, notifications, utils
+from chatbot.database import Repository
+from chatbot.core import notifications, utils
 from chatbot.core.JumoAssistant import JumoAssistant
+from chatbot.loggin_conf import configure_loggin
 
 init(autoreset=True)
 
 logger = logging.getLogger(__name__)
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    configure_loggin()
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(CorrelationIdMiddleware)
 
 BOT_NUMBER = "34930039876"
@@ -34,29 +43,35 @@ async def whatsapp_reply(request: Request):
     incoming_msg = form_data["Body"].strip()
     print(Fore.BLUE + "- User", f"{user_number}:", incoming_msg)
 
-    thread_id = await mongo.get_thread(user_number)
-
-    if not thread_id:
-        thread_id = await mongo.create_thread(user_number)
-
+    db = Repository()
+    user = await db.get_user(phone=user_number)
+    if user:
+        thread_id = user.thread_id
+    else:
         partner = await utils.get_partner_by_phone(user_number)
         if partner:
             print("Usuario encontrado en Odoo")
             incoming_msg += (
                 f". Mi nombre es: {partner['name']}. Por favor llámame por ese nombre."
             )
+            user = await db.create_user(phone=user_number, name=partner['name'])
         else:
             print("Usuario sin registrar en Odoo")
             incoming_msg += (
                 ". No estoy registrado en Odoo. Por favor, créame un usuario."
             )
-
-    await mongo.update_chat(user_id=user_number, role="User", message=incoming_msg)
+            user = await db.create_user(phone=user_number)
+        thread_id =  user["thread_id"]
 
     try:
         jumo_bot = JumoAssistant()
-        ans, tools_called = await jumo_bot.submit_message(
-            incoming_msg, user_number, thread_id
+        ans = ""
+        tools_called = []
+        asyncio.gather(
+            await db.create_message(phone=user_number, role="User", message=incoming_msg),
+            ans, tools_called = await jumo_bot.submit_message(
+                incoming_msg, user_number, thread_id
+            )
         )
         print(Fore.BLUE + "Herramientas solicitadas:", tools_called)
 
@@ -74,9 +89,7 @@ async def whatsapp_reply(request: Request):
         )
         return str(MessagingResponse())
 
-    await mongo.update_chat(
-        user_id=user_number, role="Assistant", message=ans, tools_called=tools_called
-    )
+    await db.create_message(phone=user_number, role="Assistant", message=incoming_msg, tools_called=tools_called)
 
     if len(ans) > WORDS_LIMIT:
         print(Fore.YELLOW + "Respuesta recortada por exceder el límite de Twilio")
