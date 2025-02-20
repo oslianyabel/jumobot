@@ -1,12 +1,13 @@
+import asyncio
 import json
+import logging
 
-from colorama import Fore, init
 from openai import AsyncOpenAI
 
 from chatbot.core import notifications
 from chatbot.core.config import get_config
 
-init(autoreset=True)
+logger = logging.getLogger(__name__)
 
 
 class Assistant:
@@ -36,9 +37,10 @@ class Assistant:
         self.functions[function_name] = function
 
     async def create_thread(self):
+        logger.debug("Creando hilo")
         thread = await self.client.beta.threads.create()
         thread_id = thread.id
-        print("thread created: ", Fore.BLUE + thread_id)
+        logger.debug(f"thread created: {thread_id}")
         return thread_id
 
     async def get_response(self, message_object, thread_id):
@@ -54,108 +56,99 @@ class Assistant:
         return ans
 
     async def submit_message(self, message: str, user_id=False, thread_id=None):
-        """Send a message to the model and get its response
+        if not thread_id:
+            thread_id = await self.create_thread()
 
-        Keyword arguments:
-        message -- user message (input)
-        user_id -- phone number or telegram id (exclusive uses of tools)
-        thread_id -- unique identifier of the conversation
+        message_object = await self.client.beta.threads.messages.create(
+            thread_id=thread_id, role="user", content=message
+        )
 
-        Return: (model_response:str, status_code:str | False)
-        """
+        logger.debug(f"Obteniendo respuesta de {self.name}")
+        run = await self.client.beta.threads.runs.create_and_poll(
+            thread_id=thread_id,
+            assistant_id=self.assistant_id,
+        )
 
-        try:
-            if not thread_id:
-                thread_id = await self.create_thread()
+        tools_called = []
 
-            # Crear el mensaje en el hilo
-            message_object = await self.client.beta.threads.messages.create(
-                thread_id=thread_id, role="user", content=message
-            )
+        while run.status == "requires_action":
+            tools = run.required_action.submit_tool_outputs.tool_calls
+            logger.debug(f"{len(tools)} tools need to be called!")
+            tool_outputs = []
 
-            # Crear y esperar a que el run se complete
-            run = await self.client.beta.threads.runs.create_and_poll(
-                thread_id=thread_id,
-                assistant_id=self.assistant_id,
-            )
+            # Ejecutar las herramientas en paralelo
+            tasks = []
+            for tool in tools:
+                function_name = tool.function.name
+                arguments = json.loads(tool.function.arguments)
+                logger.info(f"Function name: {function_name}")
+                logger.info(f"Function arguments: {arguments}")
 
-            tools_called = []
-
-            # Verificar si el run requiere acciones adicionales (como llamar a una función)
-            while run.status == "requires_action":
-                tools = run.required_action.submit_tool_outputs.tool_calls
-                print(Fore.BLUE + f"{len(tools)} tools need to be called!")
-
-                tool_outputs = []
-
-                for tool in tools:
-                    function_name = tool.function.name
-                    arguments = json.loads(tool.function.arguments)
-                    print("Function Name:", Fore.BLUE + f"{function_name}")
-                    print("Function Arguments:", Fore.BLUE + f"{arguments}")
-
-                    if user_id:
-                        try:
-                            function_to_call = self.functions[function_name]
-                            tool_ans = await function_to_call(
-                                **arguments, user_number=user_id
-                            )
-
-                            if tool_ans:
-                                print("Tool response:", Fore.BLUE + tool_ans)
-                            else:
-                                print(
-                                    Fore.RED + f"Error running the tool {function_name}"
-                                )
-                                tools_called.append(f"{function_name}_ERROR")
-                                tool_ans = self.error_msg
-
-                        except Exception as exc:
-                            msg = f"Error running the tool {function_name}: {exc}"
-                            print(Fore.RED + msg)
-                            notifications.send_email(
-                                "o.abel@jumotech.com", "Assistant error", msg
-                            )
-                            tools_called.append(f"{function_name}_ERROR")
-                            tool_ans = self.error_msg
-
-                    else:
-                        print(Fore.RED + "User_id not sent")
-                        tools_called.append("NO_USER_ID")
-                        tool_ans = self.error_msg
-
+                if user_id:
+                    tasks.append(self._call_tool(function_name, arguments, user_id))
+                else:
+                    logger.error(f"User_id empty in tool {function_name}")
+                    tools_called.append("NO_USER_ID")
                     tool_outputs.append(
                         {
                             "tool_call_id": tool.id,
-                            "output": tool_ans,
+                            "output": self.error_msg,
                         }
                     )
 
-                    if tool_ans != self.error_msg:
-                        tools_called.append(function_name)
+            # Ejecutar todas las tareas en paralelo
+            logger.debug(f"Ejecutando herramientas externas en {self.name}")
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result, tool in zip(results, tools):
+                if isinstance(result, Exception):
+                    msg = f"Error running the tool {tool.function.name}: {result}"
+                    logger.error(msg)
+                    notifications.send_email(
+                        "o.abel@jumotech.com", "Assistant error", msg
+                    )
+                    tools_called.append(f"{tool.function.name}_ERROR")
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool.id,
+                            "output": self.error_msg,
+                        }
+                    )
+                else:
+                    tool_outputs.append(
+                        {
+                            "tool_call_id": tool.id,
+                            "output": result,
+                        }
+                    )
+                    tools_called.append(tool.function.name)
 
-                # Enviar las respuestas de las herramientas al modelo
-                run = await self.client.beta.threads.runs.submit_tool_outputs_and_poll(
-                    thread_id=thread_id,
-                    run_id=run.id,
-                    tool_outputs=tool_outputs,
-                )
-                print("Responses from tools sent to the model")
+            run = await self.client.beta.threads.runs.submit_tool_outputs_and_poll(
+                thread_id=thread_id,
+                run_id=run.id,
+                tool_outputs=tool_outputs,
+            )
+            logger.debug("tools answers sent to the model")
 
-            # Si el run se completó, obtener la respuesta del asistente
-            if run.status == "completed":
-                return await self.get_response(message_object, thread_id), tools_called
+        if run.status == "completed":
+            return await self.get_response(message_object, thread_id), tools_called
 
-            # Si el run falló, devolver un mensaje de error
-            return self.error_msg, False
+        return self.error_msg, False
 
+    async def _call_tool(self, function_name, arguments, user_id):
+        try:
+            function_to_call = self.functions[function_name]
+            tool_ans = await function_to_call(**arguments, user_number=user_id)
+            if tool_ans:
+                logger.info(f"{function_name}: {tool_ans}")
+            else:
+                logger.error(f"Error running the tool {function_name}")
+                return self.error_msg
+            
         except Exception as exc:
-            msg = f"Model response failed: {exc}"
-            print(Fore.RED + msg)
-            notifications.send_email("o.abel@jumotech.com", "Assistant error", msg)
-            return self.error_msg, False
+            return exc
+
+        return tool_ans
 
     async def cleanup_resources(self, thread_id: str) -> None:
         """Delete a thread"""
-
         await self.client.beta.threads.delete(thread_id)

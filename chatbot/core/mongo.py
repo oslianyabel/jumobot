@@ -1,3 +1,5 @@
+import logging
+
 from colorama import Fore, init
 from motor.motor_asyncio import AsyncIOMotorClient  # Motor para MongoDB asíncrono
 from openai import AsyncOpenAI
@@ -5,6 +7,7 @@ from openai import AsyncOpenAI
 from chatbot.core import notifications
 from chatbot.core.config import get_config
 
+logger = logging.getLogger(__name__)
 init(autoreset=True)
 
 config = get_config()

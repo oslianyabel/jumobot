@@ -1,6 +1,9 @@
+import logging
 from typing import Optional
 
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class EnvConfig(BaseSettings):
@@ -31,6 +34,8 @@ class EnvConfig(BaseSettings):
     EMAIL_PASSWORD: Optional[str] = None
     EMAIL_HOST: Optional[str] = None
     DB_FORCE_ROLL_BACK: bool = False
+    BOT_NUMBER: Optional[str] = None
+    WORDS_LIMIT: Optional[int] = None
 
 
 def get_config():

@@ -1,3 +1,4 @@
+import logging
 import smtplib
 import time
 from email.message import EmailMessage
@@ -7,6 +8,7 @@ from twilio.rest import Client
 
 from chatbot.core.config import get_config
 
+logger = logging.getLogger(__name__)
 init(autoreset=True)
 
 
@@ -14,7 +16,7 @@ def send_email(EMAIL_TO, subject, message):
     config = get_config()
     if config.ENVIRONMENT != "prod":
         return True
-    
+
     EMAIL = config.EMAIL
     PASSWORD = config.EMAIL_PASSWORD
     HOST = config.EMAIL_HOST
@@ -31,11 +33,11 @@ def send_email(EMAIL_TO, subject, message):
             smtp.login(EMAIL, PASSWORD)
             smtp.sendmail(EMAIL, EMAIL_TO, email.as_string())
 
-        print("Correo enviado a", Fore.BLUE + EMAIL_TO)
+        logger.info(f"Correo enviado a {EMAIL_TO}")
         return True
 
     except Exception as exc:
-        print(Fore.RED + f"Error enviando correo a {EMAIL_TO}:", exc)
+        logger.error(f"Error enviando correo a {EMAIL_TO}: {exc}")
         return False
 
 
@@ -46,12 +48,12 @@ def send_twilio_message(body, from_, to):
         twilio_client.messages.create(
             body=body, from_=f"whatsapp:+{from_}", to=f"whatsapp:+{to}"
         )
-        print(Fore.BLUE + "- Bot:", body, sep="\n")
+        logger.info(f"Bot: {body}")
         return True
 
     except Exception as exc:
         msg = f"Error enviando mensaje de WhatsApp mediante Twilio: {str(exc)}"
-        print(Fore.RED + msg)
+        logger.error(msg)
         send_email("o.abel@jumotech.com", "Error enviando mensaje de WhatsApp", msg)
         return False
 
@@ -69,17 +71,17 @@ def send_twilio_message2(body, from_, to):
                 from_=f"whatsapp:+{from_}",
                 to=f"whatsapp:+{to}",
             )
-            print(Fore.BLUE + "- Bot:", body, sep="\n")
+            logger.info(f"Bot: {body}")
             return True
 
         except Exception as exc:
-            print(Fore.YELLOW + f"Attempt {attempt} failed:", exc)
+            logger.warning(f"Attempt {attempt} failed: {exc}")
             if attempt < retries:
-                print(Fore.YELLOW + f"Retrying in {delay * 1000}ms...")
+                logger.warning(f"Retrying in {delay * 1000}ms...")
                 time.sleep(delay)  # Wait before retrying
 
             else:
-                print(Fore.RED + "All attempts to send the message failed")
+                logger.error("All attempts to send the message failed")
                 subject = f"Error enviando mensaje de WhatsApp de {from_} a {to}"
                 msg = subject + f"\nMensaje: {body}\nError: {exc}"
                 send_email("o.abel@jumotech.com", subject, msg)

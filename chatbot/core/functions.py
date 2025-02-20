@@ -1,7 +1,8 @@
+import asyncio
 import json
+import logging
 
 import aiohttp
-from colorama import Fore, init
 from openai import OpenAI
 
 from chatbot.core import utils
@@ -9,7 +10,7 @@ from chatbot.core.config import get_config
 from chatbot.core.getToken import get_oauth_token
 from chatbot.database import Repository
 
-init(autoreset=True)
+logger = logging.getLogger(__name__)
 
 config = get_config()
 OPENAI_API_KEY = config.OPENAI_API_KEY
@@ -19,48 +20,42 @@ PUBLIC_CREATE_PATH = config.PUBLIC_CREATE_PATH
 PUBLIC_SEARCH_PATH = config.PUBLIC_SEARCH_PATH
 
 
-async def create_lead(name, email, user_number):
-    """Create a lead in Odoo.
-
-    Keyword arguments:
-    name -- Partner Name
-    email -- Partner Email
-    user_number -- Partner Number
-
-    Return: Success or failure message
-    """
-
+async def create_lead(name, email, user_number) -> str | bool:
     partner, status = await utils.create_partner_odoo(name, user_number, email)
 
     if not partner:
         msg = "Error creando el partner"
-        print(Fore.RED + msg)
+        logger.error(msg)
         return msg
 
     db = Repository()
     chat = await db.get_chat(phone=user_number)
-
     if not chat:
-        msg = f"No se encontró el chat del número: {user_number}"
-        print(Fore.YELLOW + msg)
+        msg = f"No se encontró el chat del número {user_number}"
+        logger.warning(msg)
         return msg
 
-    resume_html = await utils.resume_chat(chat, html_format=True)
-    products = utils.product_extraction(chat, user_number)
+    results = await asyncio.gather(
+        utils.resume_chat(chat, html_format=True),
+        utils.resume_chat(chat, html_format=False),
+        utils.product_extraction(chat, user_number),
+    )
+    resume_html, resume, products = results
     order_line = utils.create_order_line(products)
-
     if order_line:
-        order_id = await utils.create_sale_order(partner["id"], order_line)  # noqa: F841
-
-    lead = await utils.create_lead_odoo(partner, resume_html, email)
+        results = await asyncio.gather(
+            utils.create_sale_order(partner["id"], order_line),
+            utils.create_lead_odoo(partner, resume_html, email),
+        )
+        order_id, lead = results
+    else:
+        lead = await utils.create_lead_odoo(partner, resume_html, email)
 
     if lead:
-        resume = await utils.resume_chat(chat, html_format=False)
         utils.notify_lead(partner, resume, email, lead)
         return "El equipo de ventas se pondrá en contacto contigo próximamente"
-
     else:
-        print(Fore.RED + "Error creando el lead")
+        logger.error("Error creando el lead")
         return False
 
 
@@ -70,44 +65,39 @@ async def get_partner(user_number, name=False):
 
     if partner:
         msg = f"Socio existente: {partner}"
+        logger.debug(msg)
         return msg
 
     return f"No existe contacto registrado con el teléfono {user_number}. Pedir al usuario crear una cuenta"
 
 
 async def create_partner(name, user_number, email=None):
-    """Create a partner in odoo.
+    data = {"name": name}
+    if email:
+        data["email"] = email
 
-    Keyword arguments:
-    name -- Partner Name
-    user_number --  Partner Number
-    email -- Partner Email
-
-    Return: Confirmation Message
-    """
-
-    partner, status = await utils.create_partner_odoo(name, user_number, email)
+    db = Repository()
+    partner_data, _ = await asyncio.gather(
+        utils.create_partner_odoo(name, user_number, email),
+        db.set_user_data(phone=user_number, data=data)
+    )
+    partner = partner_data[0]
+    status = partner_data[1] 
 
     if status == "ALREADY":
-        return f"Contacto ya existente: {partner}"
+        return f"Socio encontrado: {partner}"
 
     elif status == "CREATE":
         return f"Contacto creado: {partner}"
 
-    print(Fore.RED + "Error creando el partner")
+    logger.error("Error creando el partner")
     return False
 
 
 async def presupuestos(user_number):
-    """View a customer's orders (quotes) in odoo
-
-    Keyword arguments:
-    user_number -- user number
-
-    Return: order list: str
-    """
-
-    partner = await utils.get_partner_by_phone(user_number)
+    # View a customer's orders (quotes) in odoo
+    token = await get_oauth_token()
+    partner = await utils.get_partner_by_phone(user_number, token)
 
     if not partner:
         return f"No se encontró ningún cliente con el teléfono: {user_number}"
@@ -116,7 +106,6 @@ async def presupuestos(user_number):
         # Si el partner pertenece a una compañía tomar la compañía como referencia
         partner = await utils.get_partner_by_id(partner["parent_id"][0])
 
-    token = get_oauth_token()
     url = f"{PUBLIC_ODOO_URL}{PUBLIC_SEARCH_PATH}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -131,46 +120,41 @@ async def presupuestos(user_number):
 
     async with aiohttp.ClientSession() as session:
         async with session.post(url, json=payload, headers=headers) as response:
-            if response.status_code == 200:
-                orders = response.json()
-                if orders:
-                    orders2 = []
-                    for order in orders:
-                        order2 = await sale_order_by_name(order["name"])
-                        if order2["partner_id"][0] == partner["id"]:
-                            orders2.append(order)
-                    return json.dumps(orders2)
+            if response.status == 200:
 
+                async def process_order(order, partner):
+                    order2 = await sale_order_by_name(order["name"])
+                    if order2["partner_id"][0] == partner["id"]:
+                        return order
+                    return None
+
+                orders = await response.json()
+                if orders:
+                    tasks = [process_order(order, partner) for order in orders]
+                    results = await asyncio.gather(*tasks)
+                    orders2 = [order for order in results if order is not None]
+                    return json.dumps(orders2)
                 else:
                     msg = (
                         f"No se encontraron pedidos asociados al teléfono {user_number}"
                     )
-                    print(Fore.YELLOW + msg)
+                    logger.warning(msg)
                     return msg
             else:
-                print(Fore.RED + f"Error al obtener los presupuestos: {response.text}")
+                logger.error(f"Error al obtener los presupuestos: {response.text}")
                 return False
 
 
-async def sale_order_by_name(name, user_number):
-    """View order information based on its name
-
-    Keyword arguments:
-    name -- Order Name
-    user_number -- User Number
-
-    Return: Order (str)
-    """
-
+async def sale_order_by_name(name, user_number) -> str:
     partner = await utils.get_partner_by_phone(user_number)
 
     if not partner:
         msg = "El partner no existe"
-        print(Fore.YELLOW + msg)
+        logger.warning(msg)
         return msg
 
     if not partner["is_company"] and partner["parent_id"]:
-        print(f"Compañía {partner['parent_id']} tomada como referencia")
+        logger.info(f"Compañía {partner['parent_id']} tomada como referencia")
         # Si el partner pertenece a una compañía tomar la compañía como referencia
         partner = await utils.get_partner_by_id(partner["parent_id"][0])
 
@@ -178,29 +162,18 @@ async def sale_order_by_name(name, user_number):
 
     if not order:
         msg = "El pedido no existe"
-        print(Fore.YELLOW + msg)
+        logger.warning(msg)
         return msg
 
     elif order["partner_id"][0] == partner["id"]:
         return json.dumps(order)
 
     else:
-        print(
-            Fore.YELLOW + "El pedido le pertenece a",
-            Fore.LIGHTYELLOW_EX + f"{order['partner_id'][1]}",
-        )
+        logger.warning(f"El pedido le pertenece a {order['partner_id'][1]}")
         return "El pedido no le pertenece a usted"
 
 
-async def clean_chat(user_number):
-    """Delete conversation history
-
-    Keyword arguments:
-    user_number -- User Number
-
-    Return: Delete Notify (str)
-    """
-
+async def clean_chat(user_number) -> str:
     db = Repository()
     await db.reset_thread(phone=user_number)
 
@@ -208,11 +181,4 @@ async def clean_chat(user_number):
 
 
 if __name__ == "__main__":
-    """ name = "Osliani"
-    email = "test@gmail.com"
-    user_number = "52045846"
-    
-    lead = create_lead(name, email, user_number)
-    print(lead) """
-
-    print(sale_order_by_name("S00187", "34936069261"))
+    asyncio.run(presupuestos("34930039876"))

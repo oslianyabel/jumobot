@@ -63,12 +63,12 @@ sale_order_by_name = {
 
 clean_chat = {
     "name": "clean_chat",
-    "description": "Borra el historial de mensajes de la conversación actual. Limpia el chat e inicia uno nuevo. Siempre preguntar al usuario si esta seguro de realizar la acción antes de ejecutarla.",
+    "description": "Borra el historial de mensajes de la conversación actual. Tienes prohibido ejecutar esta acción sin el consentimiento del usuario",
 }
 
 
 def show_json(obj):
-    print(json.loads(obj.model_dump_json()))
+    return json.loads(obj.model_dump_json())
 
 
 if __name__ == "__main__":
@@ -95,6 +95,10 @@ if __name__ == "__main__":
             {"type": "function", "function": presupuestos},
             {"type": "function", "function": sale_order_by_name},
         ],
+        model="gpt-4-turbo-preview"
     )
 
-    show_json(assistant)
+    assistant = client.beta.assistants.retrieve(JUMO_ASSISTANT_ID)
+    ans = show_json(assistant)
+    print(ans["id"])
+    print(ans["model"])

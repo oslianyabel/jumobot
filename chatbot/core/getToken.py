@@ -1,7 +1,10 @@
 import asyncio
+import logging
 
 import aiohttp
 from aiohttp import BasicAuth
+
+logger = logging.getLogger(__name__)
 
 
 async def get_oauth_token():
@@ -20,7 +23,8 @@ async def get_oauth_token():
     async with aiohttp.ClientSession() as session:
         async with session.post(token_url, data=data, auth=auth) as response:
             if response.status == 200:
-                return await response.json()
+                token = await response.json()
+                return token["access_token"]
             else:
                 raise Exception(f"Error al obtener el token OAuth: {response.text}")
 
@@ -36,9 +40,9 @@ if __name__ == "__main__":
     async def main():
         try:
             token = await get_oauth_token()
-            print("Token obtenido:", token)
+            logger.info(f"Token obtenido: {token}")
 
-        except Exception as e:
-            print("Error", str(e))
+        except Exception as exc:
+            logger.error(exc)
 
     asyncio.run(main())

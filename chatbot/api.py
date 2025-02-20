@@ -1,7 +1,7 @@
+import asyncio
 import logging
 import re
-import asyncio
-from contextlib import asynccontextmanager
+import time
 
 import uvicorn
 from asgi_correlation_id import CorrelationIdMiddleware
@@ -10,24 +10,26 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from twilio.twiml.messaging_response import MessagingResponse
 
-from chatbot.database import Repository
 from chatbot.core import notifications, utils
 from chatbot.core.JumoAssistant import JumoAssistant
-from chatbot.loggin_conf import configure_loggin
+from chatbot.database import Repository
+from chatbot.loggin_conf import configure_loggin, get_config
 
 init(autoreset=True)
-
+configure_loggin()
 logger = logging.getLogger(__name__)
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    configure_loggin()
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 app.add_middleware(CorrelationIdMiddleware)
 
-BOT_NUMBER = "34930039876"
-WORDS_LIMIT = 1500
+
+def checktime(last_time):
+    performance = time.time() - last_time
+    if performance > 25:
+        logger.warning(f"Performance: {performance}")
+    else:
+        logger.debug(f"Performance: {performance}")
+
+    return time.time()
 
 
 @app.exception_handler(HTTPException)
@@ -38,61 +40,77 @@ async def http_exception_handle_logging(request, exc):
 
 @app.post("/whatsapp")
 async def whatsapp_reply(request: Request):
+    last_time = time.time()
+    logger.debug("="*125)
+
+    # recieve request
     form_data = await request.form()
     user_number = re.sub(r"^whatsapp:\+", "", form_data.get("From", ""))
     incoming_msg = form_data["Body"].strip()
-    print(Fore.BLUE + "- User", f"{user_number}:", incoming_msg)
+    logger.info(f"User {user_number}: {incoming_msg}")
 
+    # load env variables
+    config = get_config()
+    BOT_NUMBER = config.BOT_NUMBER or "34930039876"
+    WORDS_LIMIT = config.WORDS_LIMIT or 1500
+
+    # get or create conversation
     db = Repository()
     user = await db.get_user(phone=user_number)
     if user:
         thread_id = user.thread_id
     else:
+        logger.info(f"Primera conversacion de {user_number}")
         partner = await utils.get_partner_by_phone(user_number)
         if partner:
-            print("Usuario encontrado en Odoo")
+            logger.info(f"{user_number} encontrado en Odoo")
             incoming_msg += (
-                f". Mi nombre es: {partner['name']}. Por favor llámame por ese nombre."
+                f". Me llamo: {partner['name']}. Por favor llámame por mi nombre"
             )
-            user = await db.create_user(phone=user_number, name=partner['name'])
+            user = await db.create_user(phone=user_number, name=partner["name"])
         else:
-            print("Usuario sin registrar en Odoo")
+            logger.info(f"{user_number} no encontrado en Odoo")
             incoming_msg += (
-                ". No estoy registrado en Odoo. Por favor, créame un usuario."
+                ". No estoy registrado en Odoo. Por favor, créame un usuario"
             )
             user = await db.create_user(phone=user_number)
-        thread_id =  user["thread_id"]
 
+        thread_id = user["thread_id"]
+
+    # obtener respuesta del LLM
     try:
         jumo_bot = JumoAssistant()
-        ans = ""
-        tools_called = []
-        asyncio.gather(
-            await db.create_message(phone=user_number, role="User", message=incoming_msg),
-            ans, tools_called = await jumo_bot.submit_message(
-                incoming_msg, user_number, thread_id
-            )
+        results = await asyncio.gather(
+            db.create_message(phone=user_number, role="User", message=incoming_msg),
+            jumo_bot.submit_message(incoming_msg, user_number, thread_id),
         )
-        print(Fore.BLUE + "Herramientas solicitadas:", tools_called)
+        _, bot_ans = results
+        ans = bot_ans[0]
+        tools_called = bot_ans[1]
+        logger.info(f"Herramientas solicitadas: {tools_called}")
 
-    except Exception as error:
-        print(Fore.RED + f"Error: {error}")
+    except Exception as exc:
+        logger.error(f"Model response failed: {exc}")
         notifications.send_twilio_message(
-            "Ha ocurrido un error. Por favor, realice la consulta más tarde.",
+            "Ha ocurrido un error. Por favor, realice la consulta más tarde",
             BOT_NUMBER,
             user_number,
         )
         notifications.send_email(
             "o.abel@jumotech.com",
             f"Error en wa_jumo respondiendo a {user_number} el mensaje: {incoming_msg}",
-            str(error),
+            str(exc),
         )
         return str(MessagingResponse())
 
-    await db.create_message(phone=user_number, role="Assistant", message=incoming_msg, tools_called=tools_called)
+    await db.create_message(
+        phone=user_number, role="Assistant", message=ans, tools_called=tools_called
+    )
 
+    # envio de msg por whatsapp
+    logger.debug("Enviando mensaje de WhatsApp")
     if len(ans) > WORDS_LIMIT:
-        print(Fore.YELLOW + "Respuesta recortada por exceder el límite de Twilio")
+        logger.warning("Respuesta fragmentada por exceder el límite de caracteres de Twilio")
         start = 0
         while start < len(ans):
             end = min(start + WORDS_LIMIT, len(ans))
@@ -107,6 +125,7 @@ async def whatsapp_reply(request: Request):
     else:
         notifications.send_twilio_message(ans, BOT_NUMBER, user_number)
 
+    last_time = checktime(last_time)
     return str(MessagingResponse())
 
 

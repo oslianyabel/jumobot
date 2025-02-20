@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import datetime
 
 from colorama import Fore, init
@@ -10,6 +11,7 @@ from chatbot.core import notifications
 from chatbot.core.config import get_config
 from chatbot.core.extractor_prompt import extractor_prompt
 
+logger = logging.getLogger(__name__)
 init(autoreset=True)
 
 
@@ -73,8 +75,8 @@ class Completions:
                     )
 
         except Exception as exc:
-            msg = f"Falló la respuesta del modelo: {exc}"
-            print(Fore.RED + msg)
+            msg = f"Falló la respuesta del modelo en wa_jumo: {exc}"
+            logger.error(msg)
             notifications.send_email("o.abel@jumotech.com", "Completions error", msg)
             return msg, False
 
@@ -97,14 +99,14 @@ class Completions:
         return ans, True
 
     async def tool_calls(self, response, user_number):
-        print("Tool calls!")
+        logger.info("Tool calls!")
         self.messages.append(response.choices[0].message)
 
         for tool_call in response.choices[0].message.tool_calls:
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
-            print(function_name)
-            print(function_args)
+            logger.info(function_name)
+            logger.info(function_args)
 
             function_to_call = self.functions[function_name]
 
