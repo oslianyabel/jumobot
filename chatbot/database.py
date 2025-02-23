@@ -176,6 +176,7 @@ class Repository:
         for msg in data:
             ans += f"- {msg.role}: {msg.message}\n"
 
+        logger.debug(f"Chat: {ans}")
         return ans
 
 

@@ -4,12 +4,13 @@ import logging
 import aiohttp
 from aiohttp import BasicAuth
 
+from chatbot.core.config import get_config
+
 logger = logging.getLogger(__name__)
 
 
 async def get_oauth_token():
-    from chatbot.core.config import get_config
-
+    logger.debug("Getting Odoo token...")
     config = get_config()
     client_id = config.PUBLIC_ODOO_CLIENT_ID
     client_secret = config.PUBLIC_ODOO_CLIENT_SECRET
@@ -27,22 +28,3 @@ async def get_oauth_token():
                 return token["access_token"]
             else:
                 raise Exception(f"Error al obtener el token OAuth: {response.text}")
-
-
-if __name__ == "__main__":
-    import os
-    import sys
-
-    sys.path.insert(
-        0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-    )
-
-    async def main():
-        try:
-            token = await get_oauth_token()
-            logger.info(f"Token obtenido: {token}")
-
-        except Exception as exc:
-            logger.error(exc)
-
-    asyncio.run(main())

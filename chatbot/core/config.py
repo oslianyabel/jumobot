@@ -51,4 +51,4 @@ def get_config():
 
 
 if __name__ == "__main__":
-    print(get_config().ENVIRONMENT)
+    print(get_config().DATABASE_URL)

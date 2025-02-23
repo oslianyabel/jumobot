@@ -1,9 +1,9 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime
 
-from colorama import Fore, init
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
@@ -12,13 +12,13 @@ from chatbot.core.config import get_config
 from chatbot.core.extractor_prompt import extractor_prompt
 
 logger = logging.getLogger(__name__)
-init(autoreset=True)
 
 
 class Completions:
     def __init__(
         self,
         messages,
+        name = "CompletionsBot",
         model="gpt-4o-mini",
         tools=[],
         functions={},
@@ -26,6 +26,7 @@ class Completions:
         response_format=False,
     ):
         self.client = AsyncOpenAI(api_key=get_config().OPENAI_API_KEY)
+        self.name = name
         self.model = model
         self.messages = messages
         self.tools = tools
@@ -34,6 +35,8 @@ class Completions:
         self.response_format = response_format
 
     async def submit_message(self, message, user_number):
+        last_time = time.time()
+
         if message:
             self.messages.append(
                 {
@@ -78,6 +81,7 @@ class Completions:
             msg = f"Falló la respuesta del modelo en wa_jumo: {exc}"
             logger.error(msg)
             notifications.send_email("o.abel@jumotech.com", "Completions error", msg)
+            logger.info(f"Performance de {self.name}: {time.time() - last_time}")
             return msg, False
 
         if response.choices[0].message.tool_calls:
@@ -96,6 +100,7 @@ class Completions:
             }
         )
 
+        logger.info(f"Performance de {self.name}: {time.time() - last_time}")
         return ans, True
 
     async def tool_calls(self, response, user_number):
@@ -136,38 +141,3 @@ class Product(BaseModel):
 
 class ProductList(BaseModel):
     products: list[Product]
-
-
-async def main():
-    messages = [{"role": "system", "content": extractor_prompt}]
-
-    model = "gpt-4o-2024-08-06"
-
-    bot = Completions(messages=messages, model=model, response_format=ProductList)
-
-    msg = """
-    User: Hola, que puedes hacer
-    Assistant: En JUMO Technologies, puedo ofrecerte una variedad de servicios adaptados a tus necesidades. Aquí tienes un resumen de lo que podemos hacer:
-
-1. *Implementación de Odoo Community Plus*: Un ERP potente sin coste de licencias, ideal para optimizar la gestión de tu empresa. 💼
-
-2. *Fábrica de Empleados Virtuales*: Crea empleados virtuales ilimitados para tareas específicas, como atención al cliente o gestión de inventarios. ¡Un empleado que nunca se enferma! 🤖
-
-3. *Desarrollo y Configuración de Odoo*: Te ayudamos a personalizar Odoo según tu industria y tus necesidades específicas. 🛠️
-
-4. *Formación y Capacitación*: Ofrecemos formación para que tú y tu equipo aprovechen al máximo Odoo. 📚
-
-5. *Módulos de Odoo*: Podemos integrarte diversos módulos, como CRM, contabilidad, ventas, y mucho más, según lo que tu empresa necesite. 🧩
-
-6. *Soporte en la Nube*: Gestión de servidores y de la plataforma Odoo, asegurando que todo funcione sin problemas. ☁️
-
-¿Te gustaría saber más sobre alguno de estos servicios específicos? ¡Estoy aquí para ayudarte! 💖
-    """
-
-    ans, ok = await bot.submit_message(msg, "52045846")
-    async for p in ans.products:
-        print(p.product_name)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

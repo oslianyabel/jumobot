@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 from chatbot.core import functions
 from chatbot.core.assistant import Assistant
@@ -33,11 +34,10 @@ async def main():
     """ ans, status = assistant.submit_message("Hola, listame mis pedidos", "34936069261", thread_id)
 	print(ans) """
 
-    ans, status = await assistant.submit_message(
-        "Hola, créame una cuenta. Me llamo Osliani Abel", "34936069261", thread_id
-    )
-
+    before = time.time()
+    ans, status = await assistant.submit_message("Hola", thread_id)
     print(ans)
+    print(time.time() - before)
 
 
 if __name__ == "__main__":

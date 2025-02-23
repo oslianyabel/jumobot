@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 
 from openai import AsyncOpenAI
 
@@ -37,7 +38,7 @@ class Assistant:
         self.functions[function_name] = function
 
     async def create_thread(self):
-        logger.debug("Creando hilo")
+        logger.debug("Creating thread...")
         thread = await self.client.beta.threads.create()
         thread_id = thread.id
         logger.debug(f"thread created: {thread_id}")
@@ -55,13 +56,28 @@ class Assistant:
 
         return ans
 
-    async def submit_message(self, message: str, user_id=False, thread_id=None):
+    async def create_message(self, thread_id, message, role):
+        message_object = await self.client.beta.threads.messages.create(
+            thread_id=thread_id, role=role, content=message
+        )
+        return message_object
+
+    async def submit_message(
+        self, message: str, user_id=None, thread_id=None
+    ) -> tuple[str, list[str]]:
+        if message.strip().lower() == "hola":
+            return (
+                "¡Hola! 😊 Soy Julia de JUMO Technologies. ¿Cómo puedo ayudarte hoy?",
+                [],
+            )
+
+        before = time.time()
+        clean = False
         if not thread_id:
             thread_id = await self.create_thread()
+            clean = True
 
-        message_object = await self.client.beta.threads.messages.create(
-            thread_id=thread_id, role="user", content=message
-        )
+        message_object = await self.create_message(thread_id, message, "user")
 
         logger.debug(f"Obteniendo respuesta de {self.name}")
         run = await self.client.beta.threads.runs.create_and_poll(
@@ -128,9 +144,16 @@ class Assistant:
                 tool_outputs=tool_outputs,
             )
             logger.debug("tools answers sent to the model")
+            # end while
 
         if run.status == "completed":
-            return await self.get_response(message_object, thread_id), tools_called
+            ans = await self.get_response(message_object, thread_id)
+            logger.info(f"{self.name}: {ans}")
+            if clean:
+                await self.cleanup_resources(thread_id)
+
+            logger.info(f"Performance de {self.name}: {time.time() - before}")
+            return ans, tools_called
 
         return self.error_msg, False
 
@@ -143,12 +166,29 @@ class Assistant:
             else:
                 logger.error(f"Error running the tool {function_name}")
                 return self.error_msg
-            
+
         except Exception as exc:
             return exc
 
         return tool_ans
 
     async def cleanup_resources(self, thread_id: str) -> None:
-        """Delete a thread"""
-        await self.client.beta.threads.delete(thread_id)
+        logger.debug(f"Borrando hilo: {thread_id}")
+        try:
+            await self.client.beta.threads.delete(thread_id)
+        except Exception as exc:
+            logger.error(exc)
+
+
+class AssistantTest(Assistant):
+    async def get_response(self, message_object, thread_id):
+        response = await self.client.beta.threads.messages.list(
+            thread_id=thread_id, order="asc", after=message_object.id
+        )
+
+        ans = f"{self.name}:\n"
+        async for message in response:
+            if hasattr(message, "content") and len(message.content) > 0:
+                ans += f"{message.content[0].text.value}\n"
+
+        return ans

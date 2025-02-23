@@ -48,7 +48,6 @@ def send_twilio_message(body, from_, to):
         twilio_client.messages.create(
             body=body, from_=f"whatsapp:+{from_}", to=f"whatsapp:+{to}"
         )
-        logger.info(f"Bot: {body}")
         return True
 
     except Exception as exc:

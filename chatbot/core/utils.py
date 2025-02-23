@@ -40,15 +40,15 @@ class ProductList(BaseModel):
     products: list[Product]
 
 
-async def resume_chat(chat, html_format=True) -> str:
+async def resume_chat(chat: str, html_format: bool=True) -> str:
     logger.debug("Obteniendo resumen...")
     if html_format:
         ASSISTANT_ID = get_config().RESUME_ASSISTANT_ID
     else:
         ASSISTANT_ID = get_config().TEXT_RESUME_ASSISTANT_ID
 
-    resumidor = Assistant("resumidor", ASSISTANT_ID)
-    resume, status = await resumidor.submit_message(chat)
+    resumidor = Assistant("Resumidor", ASSISTANT_ID)
+    resume, tools_called = await resumidor.submit_message(chat)
     logger.debug(f"Chat resumido: {resume}")
 
     return resume
@@ -58,30 +58,33 @@ async def product_extraction(history, user_number) -> list[Product]:
     logger.debug("Extrayendo productos de la conversación con IA...")
 
     messages = [{"role": "system", "content": extractor_prompt}]
-    model = "gpt-4o-2024-08-06"
-    extractor = Completions(model=model, messages=messages, response_format=ProductList)
-
+    # model = "gpt-4o-2024-08-06"
+    extractor = Completions(
+        name="Product extractor", messages=messages, response_format=ProductList
+    )
     products, ok = await extractor.submit_message(
         message=history, user_number=user_number
     )
-
     if ok:
         logger.debug(f"Productos extraídos: {products}")
         return products.products
-
     else:
         logger.error("Error extrayendo productos")
         return []
 
 
-def notify_lead(partner, resume, client_email, lead):
-    subject = "He creado una nueva oportunidad en Odoo de Jumo desde WhatsApp!"
-    message = f"ID del lead: {lead[0][0]}\n"
-    message = f"Nombre del lead: {lead[0][1]}\n"
-    message += f"Nombre del cliente: {partner['name']}\n"
-    message += f"Número de teléfono del cliente: {partner['phone']}\n"
-    message += f"Correo Electrónico del cliente: {client_email}\n"
-    message += f"Resumen de la conversación: \n{resume}\n"
+def notify_lead(partner, resume, client_email, lead, products):
+    subject = "He creado un presupuesto en el Odoo de Jumo desde WhatsApp!"
+    message = "="*50
+    message += f"\nNombre del cliente: {partner['name']}\n"
+    message += f"Teléfono del cliente: {partner['phone']}\n"
+    message += f"Email del cliente: {client_email}\n"
+    message += f"ID del lead: {lead[0][0]}\n"
+    message += f"Nombre del lead: {lead[0][1]}\n"
+    message += f"Productos solicitados: {products}\n"
+    message += f"Resumen de la conversación: \n{resume}"
+
+    logger.debug(f"Notificacion del lead: {message}")
 
     if get_config().ENVIRONMENT != "dev":
         notifications.send_email("jmojeda@jumotech.com", subject, message)
@@ -91,8 +94,7 @@ def notify_lead(partner, resume, client_email, lead):
 
 
 async def create_lead_odoo(partner, resume, email):
-    logger.debug("Creando lead en Odoo...")
-
+    logger.debug("Creating Odoo lead...")
     try:
         data = {
             "model": "crm.lead",
@@ -138,7 +140,7 @@ async def create_lead_odoo(partner, resume, email):
 
 
 def create_order_line(products):
-    logger.debug("Creando líneas de pedido...")
+    logger.debug("Creating order lines...")
 
     order_line = []
     supported_products = [622]
@@ -166,7 +168,7 @@ def create_order_line(products):
         return order_line
 
     except Exception as error:
-        msg = f"Error creando líneas de pedido: {str(error)}"
+        msg = f"Error creating order lines: {str(error)}"
         logger.error(msg)
         notifications.send_email(
             "o.abel@jumotech.com", "Error creando líneas de pedido en wa_jumo", msg
@@ -183,7 +185,7 @@ async def create_partner_odoo(name, phone, email=None):
             logger.debug(f"Partner found: {partner}")
             return partner, "ALREADY"
 
-        logger.debug("Creando Partner...")
+        logger.debug("Creating Partner...")
 
         args = [
             {
@@ -223,7 +225,7 @@ async def create_partner_odoo(name, phone, email=None):
         return partner, "CREATE"
 
     except Exception as exc:
-        msg = f"Error creando partner: {str(exc)}"
+        msg = f"Error creating partner: {str(exc)}"
         logger.error(msg)
         notifications.send_email(
             "o.abel@jumotech.com", "Error creando partner en wa_jumo", msg
@@ -350,7 +352,7 @@ async def search_product_by_id(product_id):
                     return None
 
             else:
-                msg = f"Error buscando el producto: {response.text}"
+                msg = f"Error searching the product: {response.text}"
                 notifications.send_email(
                     "o.abel@jumotech.com",
                     "Error buscando producto por id en wa_jumo",

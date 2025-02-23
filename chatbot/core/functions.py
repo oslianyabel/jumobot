@@ -9,6 +9,7 @@ from chatbot.core import utils
 from chatbot.core.config import get_config
 from chatbot.core.getToken import get_oauth_token
 from chatbot.database import Repository
+from chatbot.core import notifications
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +21,21 @@ PUBLIC_CREATE_PATH = config.PUBLIC_CREATE_PATH
 PUBLIC_SEARCH_PATH = config.PUBLIC_SEARCH_PATH
 
 
-async def create_lead(name, email, user_number) -> str | bool:
-    partner, status = await utils.create_partner_odoo(name, user_number, email)
+async def test_create_lead(name, email, services, user_number) -> str | bool:
+    return "Hemos registrado tus datos. De todas formas agenda tu cita aqui: https://outlook.office365.com/owa/calendar/IACorreo@jumotech.com/bookings/"
 
+
+async def create_lead(name, email, services, user_number) -> str | bool:
+    logger.debug("Creando lead...")
+    if config.ENVIRONMENT == "prod":
+        notifications.send_twilio_message(
+            body="La consulta se está procesando. Por favor espere unos segundos",
+            from_=config.BOT_NUMBER,
+            to=user_number,
+        )
+    partner, status = await utils.create_partner_odoo(name, user_number, email)
     if not partner:
-        msg = "Error creando el partner"
+        msg = "Error creating partner"
         logger.error(msg)
         return msg
 
@@ -35,12 +46,12 @@ async def create_lead(name, email, user_number) -> str | bool:
         logger.warning(msg)
         return msg
 
-    results = await asyncio.gather(
+    resume_html, resume, products = await asyncio.gather(
         utils.resume_chat(chat, html_format=True),
         utils.resume_chat(chat, html_format=False),
         utils.product_extraction(chat, user_number),
     )
-    resume_html, resume, products = results
+
     order_line = utils.create_order_line(products)
     if order_line:
         results = await asyncio.gather(
@@ -52,14 +63,24 @@ async def create_lead(name, email, user_number) -> str | bool:
         lead = await utils.create_lead_odoo(partner, resume_html, email)
 
     if lead:
-        utils.notify_lead(partner, resume, email, lead)
-        return "El equipo de ventas se pondrá en contacto contigo próximamente"
+        utils.notify_lead(partner, resume, email, lead, products)
+        return "Hemos registrado tus datos. Puedes agendar una cita con nosotros aqui: https://outlook.office365.com/owa/calendar/IACorreo@jumotech.com/bookings/"
     else:
         logger.error("Error creando el lead")
         return False
 
 
+async def test_get_partner(user_number, name=False):
+    partner = {
+        "name": "Osliani",
+        "email": "test@gmail.com",
+        "phone": "+5352045846",
+    }
+    return f"Socio existente: {partner}"
+
+
 async def get_partner(user_number, name=False):
+    logger.debug("Getting partner...")
     format_number = utils.format_phone_number(user_number)
     partner = await utils.get_partner_by_phone(format_number)
 
@@ -71,7 +92,17 @@ async def get_partner(user_number, name=False):
     return f"No existe contacto registrado con el teléfono {user_number}. Pedir al usuario crear una cuenta"
 
 
+async def test_create_partner(name, user_number, email=None):
+    partner = {
+        "name": "Osliani",
+        "email": "test@gmail.com",
+        "phone": "+5352045846",
+    }
+    return f"Contacto existente: {partner}"
+
+
 async def create_partner(name, user_number, email=None):
+    logger.debug("Creating partner...")
     data = {"name": name}
     if email:
         data["email"] = email
@@ -94,8 +125,13 @@ async def create_partner(name, user_number, email=None):
     return False
 
 
+async def test_presupuestos(user_number):
+    return "No se encontraron pedidos asociados al teléfono +5352045846"
+
+
 async def presupuestos(user_number):
     # View a customer's orders (quotes) in odoo
+    logger.debug(f"Getting sale orders (presupuestos) of {user_number}...")
     token = await get_oauth_token()
     partner = await utils.get_partner_by_phone(user_number, token)
 
@@ -126,6 +162,7 @@ async def presupuestos(user_number):
                     order2 = await sale_order_by_name(order["name"])
                     if order2["partner_id"][0] == partner["id"]:
                         return order
+                    
                     return None
 
                 orders = await response.json()
@@ -145,9 +182,13 @@ async def presupuestos(user_number):
                 return False
 
 
-async def sale_order_by_name(name, user_number) -> str:
-    partner = await utils.get_partner_by_phone(user_number)
+async def test_sale_order_by_name(name, user_number) -> str:
+    return "El pedido no le pertenece a usted"
 
+
+async def sale_order_by_name(name, user_number) -> str:
+    logger.debug(f"Getting sale order {name}")
+    partner = await utils.get_partner_by_phone(user_number)
     if not partner:
         msg = "El partner no existe"
         logger.warning(msg)
@@ -173,12 +214,12 @@ async def sale_order_by_name(name, user_number) -> str:
         return "El pedido no le pertenece a usted"
 
 
+async def test_clean_chat(user_number) -> str:
+    return "Historial Eliminado"
+
+
 async def clean_chat(user_number) -> str:
     db = Repository()
     await db.reset_thread(phone=user_number)
 
     return "Historial Eliminado"
-
-
-if __name__ == "__main__":
-    asyncio.run(presupuestos("34930039876"))
