@@ -3,9 +3,7 @@ import logging
 import re
 import time
 
-import uvicorn
 from asgi_correlation_id import CorrelationIdMiddleware
-from colorama import Fore, init
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from twilio.twiml.messaging_response import MessagingResponse
@@ -15,7 +13,6 @@ from chatbot.core.JumoAssistant import JumoAssistant
 from chatbot.database import Repository
 from chatbot.loggin_conf import configure_loggin, get_config
 
-init(autoreset=True)
 configure_loggin()
 logger = logging.getLogger(__name__)
 app = FastAPI()
@@ -56,7 +53,7 @@ async def whatsapp_reply(request: Request):
 
     bot = JumoAssistant()
     db = Repository()
-    
+
     # get or create conversation
     user = await db.get_user(phone=user_number)
     if user:
@@ -118,8 +115,8 @@ async def whatsapp_reply(request: Request):
 
     except Exception as exc:
         logger.error(f"Model response failed: {exc}")
-        await db.reset_thread(user_number) # por posibles trabas en el hilo
-        
+        await db.reset_thread(user_number)  # por posibles trabas en el hilo
+
         notifications.send_twilio_message(
             "Ha ocurrido un error. Por favor, consulte más tarde",
             BOT_NUMBER,

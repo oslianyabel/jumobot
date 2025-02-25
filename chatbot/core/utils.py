@@ -2,7 +2,6 @@ import json
 import logging
 
 import aiohttp
-from colorama import init
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -13,7 +12,6 @@ from chatbot.core.extractor_prompt import extractor_prompt
 from chatbot.core.getToken import get_oauth_token
 
 logger = logging.getLogger(__name__)
-init(autoreset=True)
 
 config = get_config()
 OPENAI_API_KEY = config.OPENAI_API_KEY
