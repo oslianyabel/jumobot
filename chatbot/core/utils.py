@@ -7,7 +7,6 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from chatbot.core import notifications
-from chatbot.core.assistant import Assistant
 from chatbot.core.completions import Completions
 from chatbot.core.config import get_config
 from chatbot.core.extractor_prompt import extractor_prompt
@@ -40,18 +39,36 @@ class ProductList(BaseModel):
     products: list[Product]
 
 
-async def resume_chat(chat: str, html_format: bool=True) -> str:
+async def resume_chat(chat: str, html_format: bool = True) -> str:
     logger.debug("Obteniendo resumen...")
+
+    msg_base = """Se te enviaran conversaciones entre un cliente y un asistente para que analices los aspectos mas importantes que se hablaron. Responderas con un texto que resuma toda la conversacion y quede bien definida la intencion del cliente. Necesitamos que en el resumen se destaque el servicio que desea el cliente, los precios ofrecidos, nombre del cliente y nombre de la empresa del cliente en caso de haber."""
+
     if html_format:
-        ASSISTANT_ID = get_config().RESUME_ASSISTANT_ID
+        messages = [
+            {
+                "role": "system",
+                "content": msg_base
+                + " Devuelve la respuesta en formato html resaltando partes importantes.",
+            },
+        ]
     else:
-        ASSISTANT_ID = get_config().TEXT_RESUME_ASSISTANT_ID
+        messages = [
+            {
+                "role": "system",
+                "content": msg_base
+                + " Responde con un texto que tenga un máximo de 500 palabras. No utilices saltos de línea.",
+            },
+        ]
 
-    resumidor = Assistant("Resumidor", ASSISTANT_ID)
-    resume, tools_called = await resumidor.submit_message(chat)
-    logger.debug(f"Chat resumido: {resume}")
-
-    return resume
+    resumidor = Completions(messages=messages, name="Resumidor")
+    resume, ok = await resumidor.submit_message(chat)
+    if ok:
+        logger.debug(f"Chat resumido: {resume}")
+        return resume
+    else:
+        logger.error("Error resumiendo chat")
+        return "Error resumiendo chat"
 
 
 async def product_extraction(history, user_number) -> list[Product]:
@@ -75,7 +92,7 @@ async def product_extraction(history, user_number) -> list[Product]:
 
 def notify_lead(partner, resume, client_email, lead, products):
     subject = "He creado un presupuesto en el Odoo de Jumo desde WhatsApp!"
-    message = "="*50
+    message = "=" * 50
     message += f"\nNombre del cliente: {partner['name']}\n"
     message += f"Teléfono del cliente: {partner['phone']}\n"
     message += f"Email del cliente: {client_email}\n"

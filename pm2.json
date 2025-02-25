@@ -1,12 +1,12 @@
 {
     "apps": [
       {
-        "name": "whatsapp_jumobot",
+        "name": "whatsapp_jumobot_async",
         "script": "uvicorn chatbot.api:app",
         "interpreter": "python3",
         "env": {
           "ENVIRONMENT": "prod",
-          "PORT": 3026
+          "PORT": 3044
         }
       }
     ]

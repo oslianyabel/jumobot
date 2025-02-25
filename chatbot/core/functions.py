@@ -27,7 +27,7 @@ async def test_create_lead(name, email, services, user_number) -> str | bool:
 
 async def create_lead(name, email, services, user_number) -> str | bool:
     logger.debug("Creando lead...")
-    if config.ENVIRONMENT == "prod":
+    if config.ENVIRONMENT != "test":
         notifications.send_twilio_message(
             body="La consulta se está procesando. Por favor espere unos segundos",
             from_=config.BOT_NUMBER,

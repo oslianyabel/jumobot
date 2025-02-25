@@ -56,10 +56,15 @@ async def whatsapp_reply(request: Request):
 
     bot = JumoAssistant()
     db = Repository()
+    
     # get or create conversation
     user = await db.get_user(phone=user_number)
     if user:
         thread_id = user.thread_id
+        if user.interactions == 0 and user.name:
+            logger.debug("Agregando nombre de usuario al contexto del hilo")
+            msg = f"(Este es un mensaje del sistema) El usuario se llama {user.name}. Llámalo por su nombre"
+            await bot.create_message(thread_id=thread_id, message=msg, role="user")
     else:
         logger.info(f"Primera conversacion de {user_number}")
         partner = await utils.get_partner_by_phone(user_number)
@@ -113,6 +118,8 @@ async def whatsapp_reply(request: Request):
 
     except Exception as exc:
         logger.error(f"Model response failed: {exc}")
+        await db.reset_thread(user_number) # por posibles trabas en el hilo
+        
         notifications.send_twilio_message(
             "Ha ocurrido un error. Por favor, consulte más tarde",
             BOT_NUMBER,
@@ -127,9 +134,3 @@ async def whatsapp_reply(request: Request):
     finally:
         last_time = checktime(last_time)
         return str(MessagingResponse())
-
-
-if __name__ == "__main__":
-    PORT = 3026
-    print("Bot Online en el puerto " + Fore.BLUE + f"{PORT}")
-    uvicorn.run(app, host="0.0.0.0", port=PORT)

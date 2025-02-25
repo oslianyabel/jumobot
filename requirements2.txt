@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+sqlalchemy
+databases[asyncpg]
+httpx
+rich
+asgi-correlation-id
+python-json-logger
+openai
+twilio
+aiohttp
+psycopg2
+motor
+python-multipart
+pydantic_settings

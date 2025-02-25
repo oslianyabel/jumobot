@@ -62,15 +62,8 @@ class Assistant:
         )
         return message_object
 
-    async def submit_message(
-        self, message: str, user_id=None, thread_id=None
-    ) -> tuple[str, list[str]]:
-        if message.strip().lower() == "hola":
-            return (
-                "¡Hola! 😊 Soy Julia de JUMO Technologies. ¿Cómo puedo ayudarte hoy?",
-                [],
-            )
-
+    async def submit_message(self, message: str, user_id=None, thread_id=None):
+        # return -> tuple[str, list[str]]
         before = time.time()
         clean = False
         if not thread_id:
@@ -92,7 +85,6 @@ class Assistant:
             logger.debug(f"{len(tools)} tools need to be called!")
             tool_outputs = []
 
-            # Ejecutar las herramientas en paralelo
             tasks = []
             for tool in tools:
                 function_name = tool.function.name
@@ -112,9 +104,11 @@ class Assistant:
                         }
                     )
 
-            # Ejecutar todas las tareas en paralelo
+            # Ejecutar todas las herramientas en paralelo
+            before_tools = time.time()
             logger.debug(f"Ejecutando herramientas externas en {self.name}")
             results = await asyncio.gather(*tasks, return_exceptions=True)
+            logger.debug(f"Tools performance: {time.time() - before_tools}")
             for result, tool in zip(results, tools):
                 if isinstance(result, Exception):
                     msg = f"Error running the tool {tool.function.name}: {result}"
