@@ -33,8 +33,9 @@ class Completions:
         self.tool_choice = tool_choice
         self.functions = functions
         self.response_format = response_format
+        self.error_response = "Ha ocurrido un error, realice la consulta más tarde"
 
-    async def submit_message(self, message, user_number):
+    async def submit_message(self, message, user_number = None):
         last_time = time.time()
 
         if message:
@@ -110,14 +111,22 @@ class Completions:
         for tool_call in response.choices[0].message.tool_calls:
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
+            function_to_call = self.functions[function_name]
             logger.info(function_name)
             logger.info(function_args)
 
-            function_to_call = self.functions[function_name]
+            if user_number:
+                try:
+                    function_response = await function_to_call(
+                        **function_args, user_number=user_number
+                    )
+                except Exception as exc:
+                    logger.error(exc)
+                    function_response = self.error_response
+            else:
+                logger.error("No user_id")
+                function_response = self.error_response
 
-            function_response = await function_to_call(
-                **function_args, user_number=user_number
-            )
             self.messages.append(
                 {
                     "tool_call_id": tool_call.id,
@@ -126,6 +135,7 @@ class Completions:
                     "content": function_response,
                 }
             )
+            # end for
 
         return await self.submit_message(self, False, user_number)
 

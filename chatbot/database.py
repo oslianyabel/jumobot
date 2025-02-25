@@ -15,11 +15,8 @@ logger = logging.getLogger(__name__)
 class Repository:
     def __init__(self):
         config = get_config()
-
         self.openai_client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
-
         self.metadata = sqlalchemy.MetaData()
-
         self.users_table = sqlalchemy.Table(
             "users",
             self.metadata,
@@ -30,7 +27,6 @@ class Repository:
             sqlalchemy.Column("email", String, nullable=True),
             sqlalchemy.Column("permissions", String, default="user"),
         )
-
         self.message_table = sqlalchemy.Table(
             "messages",
             self.metadata,
@@ -41,11 +37,8 @@ class Repository:
             sqlalchemy.Column("tools_called", ARRAY(String), nullable=True),
             sqlalchemy.Column("created_at", DateTime, default=func.now()),
         )
-
         self.engine = sqlalchemy.create_engine(config.DATABASE_URL)
-
         self.metadata.create_all(self.engine)
-
         self.database = databases.Database(
             config.DATABASE_URL, force_rollback=config.DB_FORCE_ROLL_BACK
         )
@@ -181,7 +174,6 @@ class Repository:
 
 
 if __name__ == "__main__":
-
     async def main():
         db = Repository()
         # get_chat
