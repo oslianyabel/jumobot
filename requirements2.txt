@@ -14,3 +14,4 @@ psycopg2
 motor
 python-multipart
 pydantic_settings
+colorama
