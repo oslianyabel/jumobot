@@ -46,19 +46,35 @@ async def whatsapp_reply(request: Request):
     incoming_msg = form_data["Body"].strip()
     logger.info(f"User {user_number}: {incoming_msg}")
 
-    # load env variables
+    # load env variables & initialize objects
     config = get_config()
     BOT_NUMBER = config.BOT_NUMBER or "34930039876"
     WORDS_LIMIT = config.WORDS_LIMIT or 1500
-
     bot = JumoAssistant()
     db = Repository()
 
-    # get or create conversation
+    # retrieve chat
     user = await db.get_user(phone=user_number)
     if user:
         thread_id = user.thread_id
-        if user.interactions == 0 and user.name:
+        if user.run_id and user.interactions > 0: # avoid blockages
+            run_status = bot.get_run_status(
+                run_id=user.run_id, thread_id=thread_id
+            )
+            if run_status == "requires_action":
+                msg = "Se está procesando su consulta anterior. Vuelva a enviar su mensaje. Si persiste el bloqueo escriba 'reset'"
+                if incoming_msg == "reset":
+                    msg = "El chat ha sido reiniciado"
+                    db.reset_thread(phone=user_number)
+
+                notifications.send_twilio_message(
+                    body=msg,
+                    from_=BOT_NUMBER,
+                    to=user_number,
+                )
+                return str(MessagingResponse())
+
+        if user.interactions == 0 and user.name: # after reset thread
             logger.debug("Agregando nombre de usuario al contexto del hilo")
             msg = f"(Este es un mensaje del sistema) El usuario se llama {user.name}. Llámalo por su nombre"
             await bot.create_message(thread_id=thread_id, message=msg, role="user")
@@ -68,16 +84,16 @@ async def whatsapp_reply(request: Request):
         if partner:
             logger.info(f"{user_number} encontrado en Odoo")
             user = await db.create_user(phone=user_number, name=partner["name"])
-            thread_id = user["thread_id"]
             msg = f"(Este es un mensaje del sistema) El usuario se llama {partner['name']}. Llámalo por su nombre"
-            await bot.create_message(thread_id=thread_id, message=msg, role="user")
         else:
             logger.info(f"{user_number} no encontrado en Odoo")
             user = await db.create_user(phone=user_number)
-            thread_id = user["thread_id"]
             msg = "(Este es un mensaje del sistema) Pidele el nombre al usuario para que le crees una cuenta"
-            await bot.create_message(thread_id=thread_id, message=msg, role="user")
+        
+        thread_id = user["thread_id"]
+        await bot.create_message(thread_id=thread_id, message=msg, role="user")
 
+    # generate IA response
     try:
         results = await asyncio.gather(
             db.create_message(phone=user_number, role="User", message=incoming_msg),

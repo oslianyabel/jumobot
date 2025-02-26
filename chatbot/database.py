@@ -23,6 +23,7 @@ class Repository:
             sqlalchemy.Column("phone", String, primary_key=True),
             sqlalchemy.Column("interactions", Integer, default=0),
             sqlalchemy.Column("thread_id", String, nullable=False),
+            sqlalchemy.Column("run_id", String, nullable=True),
             sqlalchemy.Column("name", String, nullable=True),
             sqlalchemy.Column("email", String, nullable=True),
             sqlalchemy.Column("permissions", String, default="user"),
@@ -65,6 +66,7 @@ class Repository:
         data = {
             "phone": phone,
             "thread_id": thread.id,
+            "run_id": None,
             "interactions": 0,
             "name": name,
             "email": email,
@@ -90,6 +92,7 @@ class Repository:
             .values(**data)
         )
         logger.debug(query)
+
         ans = True
         try:
             await self.database.execute(query)
@@ -107,7 +110,7 @@ class Repository:
         query = (
             self.users_table.update()
             .where(self.users_table.c.phone == phone)
-            .values(thread_id=thread.id, interactions=0)
+            .values(thread_id=thread.id, interactions=0, run_id=None)
         )
         logger.debug(query)
         query2 = self.message_table.delete().where(

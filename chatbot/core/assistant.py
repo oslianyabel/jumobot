@@ -6,6 +6,7 @@ import time
 from openai import AsyncOpenAI
 
 from chatbot.core import notifications
+from chatbot.database import Repository
 from chatbot.core.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class Assistant:
         self.error_msg = (
             "Ha ocurrido un error, por favor realice la consulta más tarde."
         )
+        self.db = Repository()
 
     def add_function(self, function_name, function):
         self.functions[function_name] = function
@@ -61,6 +63,14 @@ class Assistant:
             thread_id=thread_id, role=role, content=message
         )
         return message_object
+    
+    async def get_run_status(self, run_id, thread_id):
+        run = await self.client.beta.threads.runs.retrieve(
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+        logger.debug(f"run status: {run.status}")
+        return run.status
 
     async def submit_message(self, message: str, user_id=None, thread_id=None):
         # return -> tuple[str, list[str]]
@@ -77,9 +87,9 @@ class Assistant:
             thread_id=thread_id,
             assistant_id=self.assistant_id,
         )
+        await self.db.set_user_data(phone=user_id, data={"run_id": run.id})
 
         tools_called = []
-
         while run.status == "requires_action":
             tools = run.required_action.submit_tool_outputs.tool_calls
             logger.debug(f"{len(tools)} tools need to be called!")

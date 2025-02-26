@@ -3,13 +3,11 @@ import smtplib
 import time
 from email.message import EmailMessage
 
-from colorama import Fore, init
 from twilio.rest import Client
 
 from chatbot.core.config import get_config
 
 logger = logging.getLogger(__name__)
-init(autoreset=True)
 
 
 def send_email(EMAIL_TO, subject, message):
@@ -17,6 +15,7 @@ def send_email(EMAIL_TO, subject, message):
     if config.ENVIRONMENT != "prod":
         return True
 
+    logger.debug(f"Enviando correo a {EMAIL_TO}")
     EMAIL = config.EMAIL
     PASSWORD = config.EMAIL_PASSWORD
     HOST = config.EMAIL_HOST
@@ -42,7 +41,12 @@ def send_email(EMAIL_TO, subject, message):
 
 
 def send_twilio_message(body, from_, to):
+    config = get_config()
+    if config.ENVIRONMENT == "test":
+        return True
+    
     try:
+        logger.debug(f"Enviando mensaje de WhatsApp a {to}")
         config = get_config()
         twilio_client = Client(config.ACCOUNT_SID, config.AUTH_TOKEN)
         twilio_client.messages.create(
@@ -58,6 +62,11 @@ def send_twilio_message(body, from_, to):
 
 
 def send_twilio_message2(body, from_, to):
+    config = get_config()
+    if config.ENVIRONMENT == "test":
+        return True
+    
+    logger.debug(f"Enviando mensaje de WhatsApp a {to}")
     retries = 3
     delay = 0.5  # 500ms delay
     config = get_config()
