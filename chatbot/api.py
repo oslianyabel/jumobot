@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import re
 import time
@@ -57,10 +56,8 @@ async def whatsapp_reply(request: Request):
     user = await db.get_user(phone=user_number)
     if user:
         thread_id = user.thread_id
-        if user.run_id and user.interactions > 0: # avoid blockages
-            run_status = bot.get_run_status(
-                run_id=user.run_id, thread_id=thread_id
-            )
+        if user.run_id and user.interactions > 0:  # avoid blockages
+            run_status = bot.get_run_status(run_id=user.run_id, thread_id=thread_id)
             if run_status == "requires_action":
                 msg = "Se está procesando su consulta anterior. Vuelva a enviar su mensaje. Si persiste el bloqueo escriba 'reset'"
                 if incoming_msg == "reset":
@@ -74,7 +71,7 @@ async def whatsapp_reply(request: Request):
                 )
                 return str(MessagingResponse())
 
-        if user.interactions == 0 and user.name: # after reset thread
+        if user.interactions == 0 and user.name:  # after reset thread
             logger.debug("Agregando nombre de usuario al contexto del hilo")
             msg = f"(Este es un mensaje del sistema) El usuario se llama {user.name}. Llámalo por su nombre"
             await bot.create_message(thread_id=thread_id, message=msg, role="user")
@@ -89,28 +86,18 @@ async def whatsapp_reply(request: Request):
             logger.info(f"{user_number} no encontrado en Odoo")
             user = await db.create_user(phone=user_number)
             msg = "(Este es un mensaje del sistema) Pidele el nombre al usuario para que le crees una cuenta"
-        
+
         thread_id = user["thread_id"]
         await bot.create_message(thread_id=thread_id, message=msg, role="user")
 
     # generate IA response
     try:
-        results = await asyncio.gather(
-            db.create_message(phone=user_number, role="User", message=incoming_msg),
-            bot.submit_message(
-                incoming_msg, user_number, thread_id
-            ),  # Get response from LLM
+        ans, tools_called = (
+            await bot.submit_message(incoming_msg, user_number, thread_id),
         )
-        _, bot_ans = results
-        ans = bot_ans[0]
-        tools_called = bot_ans[1]
         logger.info(f"Tools: {tools_called}")
 
-        await db.create_message(
-            phone=user_number, role="Assistant", message=ans, tools_called=tools_called
-        )
-
-        logger.debug("Enviando mensaje por WhatsApp")
+        logger.debug("Enviando respuesta de la IA por WhatsApp")
         if len(ans) > WORDS_LIMIT:
             logger.warning(
                 "Respuesta fragmentada por exceder el límite de caracteres de Twilio"

@@ -6,8 +6,8 @@ import time
 from openai import AsyncOpenAI
 
 from chatbot.core import notifications
-from chatbot.database import Repository
 from chatbot.core.config import get_config
+from chatbot.database import Repository
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,24 @@ class Assistant:
         return thread_id
 
     async def get_response(self, message_object, thread_id):
+        logger.debug(f"Getting last message from {thread_id}")
+
         response = await self.client.beta.threads.messages.list(
             thread_id=thread_id, order="asc", after=message_object.id
+        )
+
+        ans = ""
+        async for message in response:
+            if hasattr(message, "content") and len(message.content) > 0:
+                ans += f"{message.content[0].text.value}\n"
+
+        return ans
+
+    async def get_chat(self, thread_id):
+        logger.debug(f"Getting chat from {thread_id}")
+
+        response = await self.client.beta.threads.messages.list(
+            thread_id=thread_id, order="asc"
         )
 
         ans = ""
@@ -63,7 +79,7 @@ class Assistant:
             thread_id=thread_id, role=role, content=message
         )
         return message_object
-    
+
     async def get_run_status(self, run_id, thread_id):
         run = await self.client.beta.threads.runs.retrieve(
             thread_id=thread_id,
@@ -153,6 +169,7 @@ class Assistant:
         if run.status == "completed":
             ans = await self.get_response(message_object, thread_id)
             logger.info(f"{self.name}: {ans}")
+            logger.info(f"Tools: {tools_called}")
             if clean:
                 await self.cleanup_resources(thread_id)
 
