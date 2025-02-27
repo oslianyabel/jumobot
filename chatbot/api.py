@@ -92,9 +92,7 @@ async def whatsapp_reply(request: Request):
 
     # generate IA response
     try:
-        ans, tools_called = (
-            await bot.submit_message(incoming_msg, user_number, thread_id),
-        )
+        ans, tools_called = await bot.submit_message(incoming_msg, user_number, thread_id)
         logger.info(f"Tools: {tools_called}")
 
         logger.debug("Enviando respuesta de la IA por WhatsApp")
