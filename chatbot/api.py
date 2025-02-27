@@ -134,3 +134,8 @@ async def whatsapp_reply(request: Request):
     finally:
         last_time = checktime(last_time)
         return str(MessagingResponse())
+
+
+@app.post("/bibolis")
+async def bibolis_reply(request: Request):
+    pass

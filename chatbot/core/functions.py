@@ -9,7 +9,7 @@ from chatbot.core import utils
 from chatbot.core.config import get_config
 from chatbot.core.getToken import get_oauth_token
 from chatbot.database import Repository
-from chatbot.core.JumoAssistant import JumoAssistant
+from chatbot.core.assistant import Assistant
 from chatbot.core import notifications
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ async def create_lead(name, email, services, user_number) -> str | bool:
         return msg
 
     db = Repository()
-    bot = JumoAssistant()
+    bot = Assistant(name="JumoBot_get_chat", assistant_id=config.JUMO_ASSISTANT_ID)
     user = await db.get_user(phone=user_number)
     if not user:
         msg = f"{user_number} no está registrado en la base de datos"
